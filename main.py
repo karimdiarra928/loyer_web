@@ -55,36 +55,24 @@ HTML_TEMPLATE = """
         .form-section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
         .form-row { display: flex; gap: 15px; align-items: flex-end; }
         .form-group { flex: 1; }
-        .form-group label { display: block; margin-bottom: 5px; font-size: 12px; font-weight: bold; }
-        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
         .btn-submit { background-color: #2c3e50; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; height: 35px; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; }
         th, td { padding: 12px; border-bottom: 1px solid #ddd; text-align: left; }
-        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-        .badge-paye { background-color: #d4edda; color: #155724; }
-        .badge-impaye { background-color: #f8d7da; color: #721c24; }
-        .btn-action { background-color: #2980b9; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; }
-        .btn-delete { background-color: #c0392b; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; }
+        .btn-action { background-color: #2980b9; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+        .btn-pdf { background-color: #27ae60; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+        .btn-delete { background-color: #c0392b; color: white; text-decoration: none; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🏠 Gestion de Loyer Pro</h1>
-        <div class="dashboard">
-            <div class="card card-ca"><h3>💰 Total Encaissé</h3><p>{{ "{:,.0f}".format(total_ca).replace(",", " ") }} FCFA</p></div>
-            <div class="card card-impaye"><h3>⚠️ Total Impayés</h3><p>{{ "{:,.0f}".format(total_impaye).replace(",", " ") }} FCFA</p></div>
-            <div class="card card-total"><h3>📝 Total Dossiers</h3><p>{{ total_dossiers }}</p></div>
-        </div>
         <div class="form-section">
             <form action="/ajouter" method="POST" class="form-row">
-                <div class="form-group"><label>Nom du Locataire</label><input type="text" name="locataire" required></div>
+                <div class="form-group"><label>Locataire</label><input type="text" name="locataire" required></div>
                 <div class="form-group"><label>Montant</label><input type="number" name="montant" required></div>
                 <div class="form-group"><label>Période</label><input type="text" name="periode" required></div>
-                <div class="form-group">
-                    <label>Statut</label>
-                    <select name="statut"><option value="Payé">Payé</option><option value="Impayé">Impayé</option></select>
-                </div>
-                <button type="submit" class="btn-submit">Enregistrer et Télécharger PDF</button>
+                <div class="form-group"><label>Statut</label><select name="statut"><option value="Payé">Payé</option><option value="Impayé">Impayé</option></select></div>
+                <button type="submit" class="btn-submit">Enregistrer</button>
             </form>
         </div>
         <table>
@@ -96,9 +84,10 @@ HTML_TEMPLATE = """
                     <td>{{ r.locataire }}</td>
                     <td>{{ "{:,.0f}".format(r.montant).replace(",", " ") }} FCFA</td>
                     <td>{{ r.periode }}</td>
-                    <td><span class="badge {{ 'badge-paye' if r.statut == 'Payé' else 'badge-impaye' }}">{{ r.statut }}</span></td>
+                    <td>{{ r.statut }}</td>
                     <td>
                         {% if r.statut != 'Payé' %}<a href="/marquer-paye/{{ r.id }}" class="btn-action">Régler</a>{% endif %}
+                        <a href="/telecharger-pdf/{{ r.id }}" class="btn-pdf">📄 PDF</a>
                         <a href="/supprimer/{{ r.id }}" class="btn-delete" onclick="return confirm('Confirmer ?');">🗑</a>
                     </td>
                 </tr>
@@ -114,34 +103,26 @@ HTML_TEMPLATE = """
 def index():
     response = supabase.table("recus").select("*").order("id", desc=True).execute()
     recus = response.data
-    total_ca = sum(r['montant'] for r in recus if r['statut'] == 'Payé')
-    total_impaye = sum(r['montant'] for r in recus if r['statut'] == 'Impayé')
-    return render_template_string(HTML_TEMPLATE, recus=recus, total_ca=total_ca, total_impaye=total_impaye, total_dossiers=len(recus))
+    return render_template_string(HTML_TEMPLATE, recus=recus)
 
 @app.route('/ajouter', methods=['POST'])
 def ajouter():
-    locataire = request.form['locataire']
-    montant = float(request.form['montant'])
-    periode = request.form['periode']
-    statut = request.form['statut']
-    date_paiement = datetime.now().strftime("%Y-%m-%d")
-
     data = {
-        "locataire": locataire,
-        "montant": montant,
-        "periode": periode,
-        "statut": statut,
-        "date_paiement": date_paiement
+        "locataire": request.form['locataire'],
+        "montant": float(request.form['montant']),
+        "periode": request.form['periode'],
+        "statut": request.form['statut'],
+        "date_paiement": datetime.now().strftime("%Y-%m-%d")
     }
-    
-    # Insertion
-    response = supabase.table("recus").insert(data).execute()
-    id_nouveau = response.data[0]['id']
-    
-    # Génération PDF
-    pdf_buffer = generer_pdf_en_memoire(id_nouveau, locataire, montant, periode, date_paiement)
-    
-    return send_file(pdf_buffer, as_attachment=True, download_name=f"recu_{locataire}.pdf", mimetype='application/pdf')
+    supabase.table("recus").insert(data).execute()
+    return redirect(url_for('index'))
+
+@app.route('/telecharger-pdf/<int:id_dossier>')
+def telecharger_pdf(id_dossier):
+    response = supabase.table("recus").select("*").eq("id", id_dossier).single().execute()
+    r = response.data
+    pdf_buffer = generer_pdf_en_memoire(r['id'], r['locataire'], r['montant'], r['periode'], r['date_paiement'])
+    return send_file(pdf_buffer, as_attachment=True, download_name=f"recu_{r['locataire']}.pdf", mimetype='application/pdf')
 
 @app.route('/marquer-paye/<int:id_dossier>')
 def marquer_paye(id_dossier):
