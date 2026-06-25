@@ -1,6 +1,6 @@
 import os
 import io
-from flask import Flask, render_template_string, request, redirect, url_for, make_response
+from flask import Flask, render_template_string, request, redirect, url_for, send_file
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -8,7 +8,7 @@ from supabase import create_client
 
 app = Flask(__name__)
 
-# Remplacement direct des variables pour corriger le plantage
+# Configuration Supabase
 SUPABASE_URL = "https://flfseahnmrthgowvnxjd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsZnNlYWhubXJ0aGdvd3ZueGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzOTYwMDgsImV4cCI6MjA5Nzk3MjAwOH0.gMSL7eJwc7cbQahRV2Ff7-Fp3_StGdXBCbgWWjS66aw"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -84,7 +84,7 @@ HTML_TEMPLATE = """
                     <label>Statut</label>
                     <select name="statut"><option value="Payé">Payé</option><option value="Impayé">Impayé</option></select>
                 </div>
-                <button type="submit" class="btn-submit">Enregistrer</button>
+                <button type="submit" class="btn-submit">Enregistrer et Télécharger PDF</button>
             </form>
         </div>
         <table>
@@ -120,15 +120,28 @@ def index():
 
 @app.route('/ajouter', methods=['POST'])
 def ajouter():
+    locataire = request.form['locataire']
+    montant = float(request.form['montant'])
+    periode = request.form['periode']
+    statut = request.form['statut']
+    date_paiement = datetime.now().strftime("%Y-%m-%d")
+
     data = {
-        "locataire": request.form['locataire'],
-        "montant": float(request.form['montant']),
-        "periode": request.form['periode'],
-        "statut": request.form['statut'],
-        "date_paiement": datetime.now().strftime("%Y-%m-%d")
+        "locataire": locataire,
+        "montant": montant,
+        "periode": periode,
+        "statut": statut,
+        "date_paiement": date_paiement
     }
-    supabase.table("recus").insert(data).execute()
-    return redirect(url_for('index'))
+    
+    # Insertion
+    response = supabase.table("recus").insert(data).execute()
+    id_nouveau = response.data[0]['id']
+    
+    # Génération PDF
+    pdf_buffer = generer_pdf_en_memoire(id_nouveau, locataire, montant, periode, date_paiement)
+    
+    return send_file(pdf_buffer, as_attachment=True, download_name=f"recu_{locataire}.pdf", mimetype='application/pdf')
 
 @app.route('/marquer-paye/<int:id_dossier>')
 def marquer_paye(id_dossier):
