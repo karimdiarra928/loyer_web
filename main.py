@@ -8,9 +8,9 @@ from supabase import create_client
 
 app = Flask(__name__)
 
-# Initialisation du client Supabase avec les variables d'environnement
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+# Remplacement direct des variables pour corriger le plantage
+SUPABASE_URL = "https://flfseahnmrthgowvnxjd.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZsZnNlYWhubXJ0aGdvd3ZueGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzOTYwMDgsImV4cCI6MjA5Nzk3MjAwOH0.gMSL7eJwc7cbQahRV2Ff7-Fp3_StGdXBCbgWWjS66aw"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def generer_pdf_en_memoire(id_recu, locataire, montant, periode, date_paiement):
